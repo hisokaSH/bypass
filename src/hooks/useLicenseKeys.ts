@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, LicenseKey } from '../lib/supabase';
+import { LicenseKey } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 export function useLicenseKeys() {
@@ -17,16 +17,32 @@ export function useLicenseKeys() {
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('license_keys')
-        .select('*')
-        .order('created_at', { ascending: false });
+      console.log('🔑 Fetching keys for user ID:', user.id);
 
-      if (error) throw error;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-user-keys`;
 
-      setKeys(data || []);
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'X-User-Id': user.id,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch keys');
+      }
+
+      const data = await response.json();
+      console.log('🔑 Query response:', data);
+      console.log('🔑 Number of keys returned:', data.keys?.length);
+
+      setKeys(data.keys || []);
       setError(null);
     } catch (err: any) {
+      console.error('Error fetching keys:', err);
       setError(err.message);
       setKeys([]);
     } finally {
