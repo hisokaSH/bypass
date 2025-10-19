@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLicenseKeys } from '../hooks/useLicenseKeys';
-import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings, Plus } from 'lucide-react';
+import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings, Plus, Package } from 'lucide-react';
 import { getDaysRemaining, isKeyExpired } from '../utils/keyGenerator';
 import AdminPanel from './AdminPanel';
 
@@ -215,6 +215,16 @@ export default function Dashboard() {
                   </div>
 
                   <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400 flex items-center gap-2">
+                        <Package className="w-4 h-4" />
+                        Product
+                      </span>
+                      <span className="text-white font-medium">
+                        {key.products?.name || 'Unknown'}
+                      </span>
+                    </div>
+
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-400 flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
