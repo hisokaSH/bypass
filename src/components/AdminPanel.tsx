@@ -228,17 +228,6 @@ export default function AdminPanel() {
             <KeyIcon className="w-4 h-4" />
             Manage Keys
           </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'users'
-                ? 'bg-red-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            View Users
-          </button>
         </div>
 
         {activeTab === 'keys' && (
@@ -299,47 +288,6 @@ export default function AdminPanel() {
               </div>
             )}
 
-            <div className="bg-slate-900/50 rounded-lg p-4 mb-6 border border-slate-700">
-              <h3 className="text-lg font-semibold text-white mb-4">Assign Key to User</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">User</label>
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  >
-                    <option value="">Select a user...</option>
-                    {users.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.username}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Valid for (days)</label>
-                  <input
-                    type="number"
-                    value={daysValid}
-                    onChange={(e) => setDaysValid(parseInt(e.target.value) || 30)}
-                    min="1"
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    onClick={createKey}
-                    disabled={creating || !selectedUser}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg font-semibold hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {creating ? 'Creating...' : 'Create & Assign'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <div className="mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -376,7 +324,7 @@ export default function AdminPanel() {
                           </span>
                         </div>
                         <div className="text-sm text-slate-400">
-                          <p>User: <span className="text-slate-300">{key.user_profiles?.username}</span></p>
+                          <p>User: <span className="text-slate-300">{key.user_profiles?.username || 'Unassigned'}</span></p>
                           <p>Expires: <span className="text-slate-300">{new Date(key.expires_at).toLocaleDateString()}</span></p>
                           {key.machine_id && (
                             <p className="truncate">Device: <span className="text-slate-300 font-mono text-xs">{key.machine_id}</span></p>
