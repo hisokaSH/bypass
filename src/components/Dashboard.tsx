@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLicenseKeys } from '../hooks/useLicenseKeys';
-import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings } from 'lucide-react';
+import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings, Plus } from 'lucide-react';
 import { getDaysRemaining, isKeyExpired } from '../utils/keyGenerator';
 import AdminPanel from './AdminPanel';
+import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
-  const { keys, loading } = useLicenseKeys();
+  const { keys, loading, refetch } = useLicenseKeys();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [claimKey, setClaimKey] = useState('');
+  const [claiming, setClaiming] = useState(false);
 
   console.log('🔍 Dashboard - isAdmin value:', isAdmin);
   console.log('🔍 Dashboard - user:', user);
@@ -37,6 +40,56 @@ export default function Dashboard() {
     if (status === 'revoked') return 'Revoked';
     if (isKeyExpired(expiresAt)) return 'Expired';
     return 'Active';
+  };
+
+  const handleClaimKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!claimKey.trim()) {
+      alert('Please enter a license key');
+      return;
+    }
+
+    setClaiming(true);
+    try {
+      const { data: keyData, error: fetchError } = await supabase
+        .from('license_keys')
+        .select('*')
+        .eq('key', claimKey.trim())
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!keyData) {
+        alert('Invalid license key');
+        return;
+      }
+
+      if (keyData.user_id) {
+        alert('This key has already been claimed');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('license_keys')
+        .update({
+          user_id: user?.id,
+          claimed_at: new Date().toISOString(),
+          claimed_by_username: user?.username
+        })
+        .eq('key', claimKey.trim())
+        .eq('user_id', null);
+
+      if (updateError) throw updateError;
+
+      alert('License key claimed successfully!');
+      setClaimKey('');
+      refetch();
+    } catch (error: any) {
+      console.error('Error claiming key:', error);
+      alert(error.message || 'Failed to claim key. Please try again.');
+    } finally {
+      setClaiming(false);
+    }
   };
 
   return (
@@ -89,6 +142,34 @@ export default function Dashboard() {
             <div className="mb-8">
               <h2 className="text-3xl font-bold text-white mb-2">Your License Keys</h2>
               <p className="text-slate-400">Manage and view your Vulcan Bypass license keys</p>
+            </div>
+
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 p-6 mb-8">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                Claim a License Key
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Enter your purchased license key to add it to your account
+              </p>
+              <form onSubmit={handleClaimKey} className="flex gap-3">
+                <input
+                  type="text"
+                  value={claimKey}
+                  onChange={(e) => setClaimKey(e.target.value.toUpperCase())}
+                  placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+                  className="flex-1 px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono"
+                  disabled={claiming}
+                  maxLength={24}
+                />
+                <button
+                  type="submit"
+                  disabled={claiming || !claimKey.trim()}
+                  className="px-6 py-3 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg font-semibold hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {claiming ? 'Claiming...' : 'Claim Key'}
+                </button>
+              </form>
             </div>
 
             {loading ? (
