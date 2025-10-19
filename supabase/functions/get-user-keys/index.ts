@@ -1,12 +1,13 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
+import { createClient } from 'npm:@supabase/Bolt Database-js@2.57.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey, X-User-Id',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
 Deno.serve(async (req: Request) => {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -15,63 +16,50 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Get user ID from custom header
-    const userId = req.headers.get('X-User-Id');
-    
+    const Bolt Database = createClient(
+      Deno.env.get('Bolt Database_URL')!,
+      Deno.env.get('Bolt Database_SERVICE_ROLE_KEY')!
+    );
+
+    const url = new URL(req.url);
+    const userId = url.searchParams.get('userId');
+
     if (!userId) {
       return new Response(
-        JSON.stringify({ error: 'User ID required' }),
+        JSON.stringify({ error: 'userId is required' }),
         {
-          status: 401,
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
-    // Create Supabase client with service role key
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Verify the user exists
-    const { data: userProfile, error: userError } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (userError || !userProfile) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid user' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Fetch only the user's license keys
-    const { data: keys, error: keysError } = await supabase
+    const { data: keys, error } = await Bolt Database
       .from('license_keys')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('claimed_at', { ascending: false });
 
-    if (keysError) {
-      throw keysError;
+    if (error) {
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     return new Response(
-      JSON.stringify({ keys: keys || [] }),
+      JSON.stringify(keys || []),
       {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
-  } catch (error: any) {
-    console.error('Error fetching user keys:', error);
+  } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ error: error.message }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
