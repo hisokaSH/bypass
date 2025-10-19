@@ -4,7 +4,6 @@ import { useLicenseKeys } from '../hooks/useLicenseKeys';
 import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings, Plus } from 'lucide-react';
 import { getDaysRemaining, isKeyExpired } from '../utils/keyGenerator';
 import AdminPanel from './AdminPanel';
-import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
@@ -51,37 +50,27 @@ export default function Dashboard() {
 
     setClaiming(true);
     try {
-      const { data: keyData, error: fetchError } = await supabase
-        .from('license_keys')
-        .select('*')
-        .eq('key', claimKey.trim())
-        .maybeSingle();
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claim-key`;
 
-      if (fetchError) throw fetchError;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'X-User-Id': user?.id || '',
+          'X-Username': user?.username || '',
+        },
+        body: JSON.stringify({ key: claimKey.trim() }),
+      });
 
-      if (!keyData) {
-        alert('Invalid license key');
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || 'Failed to claim key');
         return;
       }
 
-      if (keyData.user_id) {
-        alert('This key has already been claimed');
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from('license_keys')
-        .update({
-          user_id: user?.id,
-          claimed_at: new Date().toISOString(),
-          claimed_by_username: user?.username
-        })
-        .eq('key', claimKey.trim())
-        .eq('user_id', null);
-
-      if (updateError) throw updateError;
-
-      alert('License key claimed successfully!');
+      alert(data.message || 'License key claimed successfully!');
       setClaimKey('');
       refetch();
     } catch (error: any) {
