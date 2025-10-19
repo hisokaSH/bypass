@@ -12,16 +12,14 @@ interface User {
 
 interface LicenseKey {
   id: string;
-  user_id: string;
+  user_id: string | null;
   key: string;
   status: string;
   expires_at: string;
   created_at: string;
   machine_id: string | null;
-  user_profiles?: {
-    username: string;
-    email: string | null;
-  };
+  claimed_by_username: string | null;
+  claimed_at: string | null;
 }
 
 export default function AdminPanel() {
@@ -47,7 +45,7 @@ export default function AdminPanel() {
         supabase.from('user_profiles').select('*').order('created_at', { ascending: false }),
         supabase
           .from('license_keys')
-          .select('*, user_profiles(username)')
+          .select('*')
           .order('created_at', { ascending: false })
       ]);
 
@@ -194,7 +192,7 @@ export default function AdminPanel() {
     const searchLower = searchTerm.toLowerCase();
     return (
       key.key.toLowerCase().includes(searchLower) ||
-      key.user_profiles?.username?.toLowerCase().includes(searchLower)
+      key.claimed_by_username?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -324,7 +322,7 @@ export default function AdminPanel() {
                           </span>
                         </div>
                         <div className="text-sm text-slate-400">
-                          <p>User: <span className="text-slate-300">{key.user_profiles?.username || 'Unassigned'}</span></p>
+                          <p>User: <span className="text-slate-300">{key.claimed_by_username || 'Unassigned'}</span></p>
                           <p>Expires: <span className="text-slate-300">{new Date(key.expires_at).toLocaleDateString()}</span></p>
                           {key.machine_id && (
                             <p className="truncate">Device: <span className="text-slate-300 font-mono text-xs">{key.machine_id}</span></p>
