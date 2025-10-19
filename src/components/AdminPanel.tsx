@@ -20,14 +20,30 @@ interface LicenseKey {
   machine_id: string | null;
   claimed_by_username: string | null;
   claimed_at: string | null;
+  product_id: string | null;
+  products?: {
+    name: string;
+    description: string;
+  };
+}
+
+interface Product {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  created_at: string;
 }
 
 export default function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
   const [allKeys, setAllKeys] = useState<LicenseKey[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
+  const [selectedProduct, setSelectedProduct] = useState<string>('');
+  const [productFilter, setProductFilter] = useState<string>('all');
   const [daysValid, setDaysValid] = useState(30);
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'keys'>('keys');
@@ -41,19 +57,22 @@ export default function AdminPanel() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [usersRes, keysRes] = await Promise.all([
+      const [usersRes, keysRes, productsRes] = await Promise.all([
         supabase.from('user_profiles').select('*').order('created_at', { ascending: false }),
         supabase
           .from('license_keys')
-          .select('*')
-          .order('created_at', { ascending: false })
+          .select('*, products(name, description)')
+          .order('created_at', { ascending: false }),
+        supabase.from('products').select('*').order('name', { ascending: true })
       ]);
 
       if (usersRes.error) throw usersRes.error;
       if (keysRes.error) throw keysRes.error;
+      if (productsRes.error) throw productsRes.error;
 
       setUsers(usersRes.data || []);
       setAllKeys(keysRes.data || []);
+      setProducts(productsRes.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -99,6 +118,11 @@ export default function AdminPanel() {
       return;
     }
 
+    if (!selectedProduct) {
+      alert('Please select a product for the keys');
+      return;
+    }
+
     setCreating(true);
     try {
       const keysToInsert = [];
@@ -113,7 +137,8 @@ export default function AdminPanel() {
           user_id: null,
           key: newKey,
           status: 'active',
-          expires_at: expiresAt.toISOString()
+          expires_at: expiresAt.toISOString(),
+          product_id: selectedProduct
         });
       }
 
@@ -190,10 +215,15 @@ export default function AdminPanel() {
 
   const filteredKeys = allKeys.filter(key => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = (
       key.key.toLowerCase().includes(searchLower) ||
-      key.claimed_by_username?.toLowerCase().includes(searchLower)
+      key.claimed_by_username?.toLowerCase().includes(searchLower) ||
+      key.products?.name.toLowerCase().includes(searchLower)
     );
+
+    const matchesProduct = productFilter === 'all' || key.product_id === productFilter;
+
+    return matchesSearch && matchesProduct;
   });
 
   const filteredUsers = users.filter(user => {
@@ -232,7 +262,20 @@ export default function AdminPanel() {
           <>
             <div className="bg-slate-900/50 rounded-lg p-4 mb-6 border border-slate-700">
               <h3 className="text-lg font-semibold text-white mb-4">Generate Bulk Keys (Unassigned)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Product</label>
+                  <select
+                    value={selectedProduct}
+                    onChange={(e) => setSelectedProduct(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  >
+                    <option value="">Select Product</option>
+                    {products.filter(p => p.is_active).map(product => (
+                      <option key={product.id} value={product.id}>{product.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Number of Keys</label>
                   <input
@@ -286,16 +329,28 @@ export default function AdminPanel() {
               </div>
             )}
 
-            <div className="mb-4">
+            <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search keys by key or username..."
+                  placeholder="Search keys by key, username, or product..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
+              </div>
+              <div>
+                <select
+                  value={productFilter}
+                  onChange={(e) => setProductFilter(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="all">All Products</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -322,6 +377,7 @@ export default function AdminPanel() {
                           </span>
                         </div>
                         <div className="text-sm text-slate-400">
+                          <p>Product: <span className="text-slate-300">{key.products?.name || 'No Product'}</span></p>
                           <p>User: <span className="text-slate-300">{key.claimed_by_username || 'Unassigned'}</span></p>
                           <p>Expires: <span className="text-slate-300">{new Date(key.expires_at).toLocaleDateString()}</span></p>
                           {key.machine_id && (
