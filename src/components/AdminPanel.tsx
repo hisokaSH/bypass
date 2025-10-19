@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { generateLicenseKey } from '../utils/keyGenerator';
-import { Plus, Trash2, Clock, Ban, RefreshCw, Search, Users, Key as KeyIcon } from 'lucide-react';
+import { Plus, Trash2, Clock, Ban, RefreshCw, Search, Users, Key as KeyIcon, Package } from 'lucide-react';
 
 interface User {
   id: string;
@@ -12,14 +12,12 @@ interface User {
 
 interface LicenseKey {
   id: string;
-  user_id: string | null;
+  user_id: string;
   key: string;
   status: string;
   expires_at: string;
   created_at: string;
   machine_id: string | null;
-  claimed_at: string | null;
-  claimed_by_username: string | null;
   user_profiles?: {
     username: string;
     email: string | null;
@@ -31,10 +29,12 @@ export default function AdminPanel() {
   const [allKeys, setAllKeys] = useState<LicenseKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [bulkCount, setBulkCount] = useState(1);
+  const [selectedUser, setSelectedUser] = useState<string>('');
   const [daysValid, setDaysValid] = useState(30);
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'keys'>('keys');
+  const [bulkCount, setBulkCount] = useState(10);
+  const [generatedKeys, setGeneratedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     loadData();
@@ -63,22 +63,57 @@ export default function AdminPanel() {
     }
   };
 
-  const createKeys = async () => {
-    if (bulkCount < 1) {
-      alert('Please enter a valid number of keys');
+  const createKey = async () => {
+    if (!selectedUser) {
+      alert('Please select a user');
       return;
     }
 
     setCreating(true);
     try {
+      const newKey = generateLicenseKey();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + daysValid);
 
+      const { error } = await supabase.from('license_keys').insert({
+        user_id: selectedUser,
+        key: newKey,
+        status: 'active',
+        expires_at: expiresAt.toISOString()
+      });
+
+      if (error) throw error;
+
+      await loadData();
+      setSelectedUser('');
+      alert('License key created successfully!');
+    } catch (error) {
+      console.error('Error creating key:', error);
+      alert('Failed to create license key');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const createBulkKeys = async () => {
+    if (bulkCount < 1 || bulkCount > 100) {
+      alert('Please enter a number between 1 and 100');
+      return;
+    }
+
+    setCreating(true);
+    try {
       const keysToInsert = [];
+      const keysList = [];
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + daysValid);
+
       for (let i = 0; i < bulkCount; i++) {
+        const newKey = generateLicenseKey();
+        keysList.push(newKey);
         keysToInsert.push({
           user_id: null,
-          key: generateLicenseKey(),
+          key: newKey,
           status: 'active',
           expires_at: expiresAt.toISOString()
         });
@@ -89,14 +124,20 @@ export default function AdminPanel() {
       if (error) throw error;
 
       await loadData();
-      setBulkCount(1);
-      alert(`Successfully created ${bulkCount} license key${bulkCount > 1 ? 's' : ''}!`);
+      setGeneratedKeys(keysList);
+      alert(`Successfully generated ${bulkCount} license keys!`);
     } catch (error) {
-      console.error('Error creating keys:', error);
-      alert('Failed to create license keys');
+      console.error('Error creating bulk keys:', error);
+      alert('Failed to create bulk keys');
     } finally {
       setCreating(false);
     }
+  };
+
+  const copyAllKeys = () => {
+    const keysText = generatedKeys.join('\n');
+    navigator.clipboard.writeText(keysText);
+    alert('All keys copied to clipboard!');
   };
 
   const updateKeyStatus = async (keyId: string, newStatus: string) => {
@@ -203,15 +244,14 @@ export default function AdminPanel() {
         {activeTab === 'keys' && (
           <>
             <div className="bg-slate-900/50 rounded-lg p-4 mb-6 border border-slate-700">
-              <h3 className="text-lg font-semibold text-white mb-4">Create License Keys (Bulk)</h3>
-              <p className="text-sm text-slate-400 mb-4">Generate unassigned keys that users can claim by entering the key code</p>
+              <h3 className="text-lg font-semibold text-white mb-4">Generate Bulk Keys (Unassigned)</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Number of Keys</label>
                   <input
                     type="number"
                     value={bulkCount}
-                    onChange={(e) => setBulkCount(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setBulkCount(parseInt(e.target.value) || 10)}
                     min="1"
                     max="100"
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
@@ -229,12 +269,72 @@ export default function AdminPanel() {
                 </div>
                 <div className="flex items-end">
                   <button
-                    onClick={createKeys}
+                    onClick={createBulkKeys}
                     disabled={creating}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg font-semibold hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-4 h-4" />
-                    {creating ? 'Creating...' : `Create ${bulkCount} Key${bulkCount > 1 ? 's' : ''}`}
+                    {creating ? 'Generating...' : 'Generate Keys'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {generatedKeys.length > 0 && (
+              <div className="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-green-400 font-semibold">Generated Keys ({generatedKeys.length})</h4>
+                  <button
+                    onClick={copyAllKeys}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors"
+                  >
+                    Copy All
+                  </button>
+                </div>
+                <div className="bg-slate-900/50 rounded p-3 max-h-48 overflow-y-auto">
+                  {generatedKeys.map((key, idx) => (
+                    <div key={idx} className="font-mono text-sm text-white py-1">{key}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-slate-900/50 rounded-lg p-4 mb-6 border border-slate-700">
+              <h3 className="text-lg font-semibold text-white mb-4">Assign Key to User</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">User</label>
+                  <select
+                    value={selectedUser}
+                    onChange={(e) => setSelectedUser(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  >
+                    <option value="">Select a user...</option>
+                    {users.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.username}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Valid for (days)</label>
+                  <input
+                    type="number"
+                    value={daysValid}
+                    onChange={(e) => setDaysValid(parseInt(e.target.value) || 30)}
+                    min="1"
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={createKey}
+                    disabled={creating || !selectedUser}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg font-semibold hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {creating ? 'Creating...' : 'Create & Assign'}
                   </button>
                 </div>
               </div>
@@ -276,11 +376,8 @@ export default function AdminPanel() {
                           </span>
                         </div>
                         <div className="text-sm text-slate-400">
-                          <p>User: <span className="text-slate-300">{key.user_id ? (key.user_profiles?.username || key.claimed_by_username || 'Unknown') : <span className="text-yellow-500 font-medium">Unclaimed</span>}</span></p>
+                          <p>User: <span className="text-slate-300">{key.user_profiles?.username}</span></p>
                           <p>Expires: <span className="text-slate-300">{new Date(key.expires_at).toLocaleDateString()}</span></p>
-                          {key.claimed_at && (
-                            <p>Claimed: <span className="text-slate-300">{new Date(key.claimed_at).toLocaleDateString()}</span></p>
-                          )}
                           {key.machine_id && (
                             <p className="truncate">Device: <span className="text-slate-300 font-mono text-xs">{key.machine_id}</span></p>
                           )}
