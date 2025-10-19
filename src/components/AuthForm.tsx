@@ -14,13 +14,9 @@ export default function AuthForm() {
 
   useEffect(() => {
     if (user) {
-      if (isAdmin) {
-        navigate('/admin');
-      } else {
-        navigate('/');
-      }
+      navigate('/');
     }
-  }, [user, isAdmin, navigate]);
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,18 +25,14 @@ export default function AuthForm() {
 
     try {
       if (isLogin) {
-        const { error, isAdmin: userIsAdmin } = await signIn(username, password);
+        const { error } = await signIn(username, password);
         if (error) {
           setError(error.message);
-        } else {
-          navigate(userIsAdmin ? '/admin' : '/');
         }
       } else {
         const { error } = await signUp(username, password);
         if (error) {
           setError(error.message);
-        } else {
-          navigate('/');
         }
       }
     } catch (err) {
