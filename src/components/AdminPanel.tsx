@@ -12,12 +12,14 @@ interface User {
 
 interface LicenseKey {
   id: string;
-  user_id: string;
+  user_id: string | null;
   key: string;
   status: string;
   expires_at: string;
   created_at: string;
   machine_id: string | null;
+  claimed_at: string | null;
+  claimed_by_username: string | null;
   user_profiles?: {
     username: string;
     email: string | null;
@@ -29,7 +31,7 @@ export default function AdminPanel() {
   const [allKeys, setAllKeys] = useState<LicenseKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState<string>('');
+  const [bulkCount, setBulkCount] = useState(1);
   const [daysValid, setDaysValid] = useState(30);
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'keys'>('keys');
@@ -61,33 +63,37 @@ export default function AdminPanel() {
     }
   };
 
-  const createKey = async () => {
-    if (!selectedUser) {
-      alert('Please select a user');
+  const createKeys = async () => {
+    if (bulkCount < 1) {
+      alert('Please enter a valid number of keys');
       return;
     }
 
     setCreating(true);
     try {
-      const newKey = generateLicenseKey();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + daysValid);
 
-      const { error } = await supabase.from('license_keys').insert({
-        user_id: selectedUser,
-        key: newKey,
-        status: 'active',
-        expires_at: expiresAt.toISOString()
-      });
+      const keysToInsert = [];
+      for (let i = 0; i < bulkCount; i++) {
+        keysToInsert.push({
+          user_id: null,
+          key: generateLicenseKey(),
+          status: 'active',
+          expires_at: expiresAt.toISOString()
+        });
+      }
+
+      const { error } = await supabase.from('license_keys').insert(keysToInsert);
 
       if (error) throw error;
 
       await loadData();
-      setSelectedUser('');
-      alert('License key created successfully!');
+      setBulkCount(1);
+      alert(`Successfully created ${bulkCount} license key${bulkCount > 1 ? 's' : ''}!`);
     } catch (error) {
-      console.error('Error creating key:', error);
-      alert('Failed to create license key');
+      console.error('Error creating keys:', error);
+      alert('Failed to create license keys');
     } finally {
       setCreating(false);
     }
@@ -197,22 +203,19 @@ export default function AdminPanel() {
         {activeTab === 'keys' && (
           <>
             <div className="bg-slate-900/50 rounded-lg p-4 mb-6 border border-slate-700">
-              <h3 className="text-lg font-semibold text-white mb-4">Create New License Key</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">Create License Keys (Bulk)</h3>
+              <p className="text-sm text-slate-400 mb-4">Generate unassigned keys that users can claim by entering the key code</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">User</label>
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Number of Keys</label>
+                  <input
+                    type="number"
+                    value={bulkCount}
+                    onChange={(e) => setBulkCount(parseInt(e.target.value) || 1)}
+                    min="1"
+                    max="100"
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  >
-                    <option value="">Select a user...</option>
-                    {users.map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.username}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Valid for (days)</label>
@@ -226,12 +229,12 @@ export default function AdminPanel() {
                 </div>
                 <div className="flex items-end">
                   <button
-                    onClick={createKey}
-                    disabled={creating || !selectedUser}
+                    onClick={createKeys}
+                    disabled={creating}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg font-semibold hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-4 h-4" />
-                    {creating ? 'Creating...' : 'Create Key'}
+                    {creating ? 'Creating...' : `Create ${bulkCount} Key${bulkCount > 1 ? 's' : ''}`}
                   </button>
                 </div>
               </div>
@@ -273,8 +276,11 @@ export default function AdminPanel() {
                           </span>
                         </div>
                         <div className="text-sm text-slate-400">
-                          <p>User: <span className="text-slate-300">{key.user_profiles?.username}</span></p>
+                          <p>User: <span className="text-slate-300">{key.user_id ? (key.user_profiles?.username || key.claimed_by_username || 'Unknown') : <span className="text-yellow-500 font-medium">Unclaimed</span>}</span></p>
                           <p>Expires: <span className="text-slate-300">{new Date(key.expires_at).toLocaleDateString()}</span></p>
+                          {key.claimed_at && (
+                            <p>Claimed: <span className="text-slate-300">{new Date(key.claimed_at).toLocaleDateString()}</span></p>
+                          )}
                           {key.machine_id && (
                             <p className="truncate">Device: <span className="text-slate-300 font-mono text-xs">{key.machine_id}</span></p>
                           )}
