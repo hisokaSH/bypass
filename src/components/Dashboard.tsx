@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLicenseKeys } from '../hooks/useLicenseKeys';
-import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings } from 'lucide-react';
+import { LogOut, Key, Calendar, Shield, Copy, CheckCircle, AlertTriangle, Clock, Settings, Plus } from 'lucide-react';
 import { getDaysRemaining, isKeyExpired } from '../utils/keyGenerator';
+import { supabase } from '../lib/supabase';
 import AdminPanel from './AdminPanel';
 
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
-  const { keys, loading } = useLicenseKeys();
+  const { keys, loading, refetch } = useLicenseKeys();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showClaimForm, setShowClaimForm] = useState(false);
+  const [claimKeyInput, setClaimKeyInput] = useState('');
+  const [claiming, setClaiming] = useState(false);
 
   console.log('🔍 Dashboard - isAdmin value:', isAdmin);
   console.log('🔍 Dashboard - user:', user);
@@ -37,6 +41,66 @@ export default function Dashboard() {
     if (status === 'revoked') return 'Revoked';
     if (isKeyExpired(expiresAt)) return 'Expired';
     return 'Active';
+  };
+
+  const claimKey = async () => {
+    if (!claimKeyInput.trim()) {
+      alert('Please enter a license key');
+      return;
+    }
+
+    setClaiming(true);
+    try {
+      const { data: keyData, error: fetchError } = await supabase
+        .from('license_keys')
+        .select('*')
+        .eq('key', claimKeyInput.trim())
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!keyData) {
+        alert('Invalid license key');
+        return;
+      }
+
+      if (keyData.user_id) {
+        alert('This key has already been claimed');
+        return;
+      }
+
+      if (keyData.status !== 'active') {
+        alert('This key is not active');
+        return;
+      }
+
+      if (isKeyExpired(keyData.expires_at)) {
+        alert('This key has expired');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('license_keys')
+        .update({
+          user_id: user?.id,
+          claimed_at: new Date().toISOString(),
+          claimed_by_username: user?.username
+        })
+        .eq('id', keyData.id)
+        .eq('user_id', null);
+
+      if (updateError) throw updateError;
+
+      alert('License key claimed successfully!');
+      setClaimKeyInput('');
+      setShowClaimForm(false);
+      refetch();
+    } catch (error) {
+      console.error('Error claiming key:', error);
+      alert('Failed to claim license key');
+    } finally {
+      setClaiming(false);
+    }
   };
 
   return (
@@ -87,8 +151,43 @@ export default function Dashboard() {
         ) : (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-white mb-2">Your License Keys</h2>
-              <p className="text-slate-400">Manage and view your Vulcan Bypass license keys</p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-2">Your License Keys</h2>
+                  <p className="text-slate-400">Manage and view your Vulcan Bypass license keys</p>
+                </div>
+                <button
+                  onClick={() => setShowClaimForm(!showClaimForm)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white rounded-lg font-semibold transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                  Claim Key
+                </button>
+              </div>
+
+              {showClaimForm && (
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 p-6 mb-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Claim a License Key</h3>
+                  <p className="text-sm text-slate-400 mb-4">Enter your purchased license key to activate it</p>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={claimKeyInput}
+                      onChange={(e) => setClaimKeyInput(e.target.value)}
+                      placeholder="Enter license key (e.g., VB-XXXX-XXXX-XXXX-XXXX)"
+                      className="flex-1 px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      disabled={claiming}
+                    />
+                    <button
+                      onClick={claimKey}
+                      disabled={claiming || !claimKeyInput.trim()}
+                      className="px-6 py-3 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {claiming ? 'Claiming...' : 'Claim'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {loading ? (
