@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthForm from './components/AuthForm';
 import Dashboard from './components/Dashboard';
 import ActivationPage from './pages/ActivationPage';
+import SoftwareLauncherPage from './pages/SoftwareLauncherPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, isAdmin } = useAuth();
@@ -28,6 +29,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          <Route path="/launcher" element={<SoftwareLauncherPage />} />
           <Route path="/activate" element={<ActivationPage />} />
           <Route path="/login" element={<AuthForm />} />
           <Route
