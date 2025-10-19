@@ -18,6 +18,12 @@ export type LicenseKey = {
   created_at: string;
   last_validated_at: string | null;
   machine_id: string | null;
+  product_id: string | null;
+  products?: {
+    id: string;
+    name: string;
+    description: string;
+  };
 };
 
 export type UserProfile = {
